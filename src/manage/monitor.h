@@ -717,7 +717,7 @@ void closemon(Monitor *m) {
 	int32_t i = 0, nmons = wl_list_length(&mons);
 
 	if (m->isoverview) {
-		toggleoverview(&(Arg){.i = 1});
+		toggleoverview(&(Arg){0});
 	}
 
 	if (!nmons) {

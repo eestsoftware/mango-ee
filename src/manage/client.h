@@ -1178,6 +1178,8 @@ static void apply_rule_properties(Client *c, const ConfigWinRule *r) {
 
 	APPLY_STRING_PROP(c, r, animation_type_open);
 	APPLY_STRING_PROP(c, r, animation_type_close);
+	APPLY_STRING_PROP(c, r, animation_type_unminimize);
+	APPLY_STRING_PROP(c, r, animation_type_minimize);
 }
 
 void set_float_malposition(Client *tc) {
@@ -1726,6 +1728,7 @@ void init_client_properties(Client *c) {
 	c->need_output_flush = 0;
 	c->scroller_proportion = config.scroller_default_proportion;
 	c->is_pending_open_animation = true;
+	c->is_pending_unminimize_animation = false;
 	c->drag_to_tile = false;
 	c->scratchpad_switching_mon = false;
 	c->fake_no_border = false;
@@ -2027,6 +2030,7 @@ void unmapnotify(struct wl_listener *listener, void *data) {
 	Monitor *m = NULL;
 	Client *nextfocus = NULL;
 	c->iskilling = 1;
+	switcher_remove_client(c);
 	struct ScrollerStackNode *target_node =
 		c->mon ? find_scroller_node(
 					 c->mon->pertag->scroller_state[c->mon->pertag->curtag], c)
@@ -2038,7 +2042,7 @@ void unmapnotify(struct wl_listener *listener, void *data) {
 
 	if (config.animations && !c->is_clip_to_hide && !c->isminimized &&
 		(!c->mon || VISIBLEON(c, c->mon)))
-		init_fadeout_client(c);
+		init_fadeout_client(c, 0);
 
 	// If the client is in a stack, remove it from the stack
 
@@ -2207,6 +2211,7 @@ destroynotify(struct wl_listener *listener, void *data) {
 		wl_list_remove(&c->destroy_decoration.link);
 		wl_list_remove(&c->set_decoration_mode.link);
 	}
+	switcher_remove_client(c);
 	free(c);
 }
 
@@ -2521,6 +2526,7 @@ void client_active(Client *c) {
 		c->isnamedscratchpad = 0;
 		c->is_scratchpad_show = 0;
 		setborder_color(c);
+		c->is_pending_unminimize_animation = true;
 		show_hide_client(c);
 		arrange(c->mon, true, false);
 		return;
@@ -2959,6 +2965,8 @@ void set_minimized(Client *c) {
 	if (!c || !c->mon || c == grabc)
 		return;
 
+	if ((c->mon->tagset[c->mon->seltags] & c->tags) != 0) // Only do minimize animation if on active tag
+		init_fadeout_client(c, 1);
 	c->isglobal = 0;
 	c->oldtags = c->mon->tagset[c->mon->seltags];
 	c->mini_restore_tag = c->tags;
@@ -2979,7 +2987,6 @@ void set_minimized(Client *c) {
 
 void unminimize(Client *c) {
 	if (c && c->is_in_scratchpad && c->is_scratchpad_show) {
-		client_pending_minimized_state(c, 0);
 		c->is_scratchpad_show = 0;
 		c->is_in_scratchpad = 0;
 		c->isnamedscratchpad = 0;
@@ -2988,6 +2995,7 @@ void unminimize(Client *c) {
 	}
 
 	if (c && c->isminimized) {
+		client_pending_minimized_state(c, 0);
 		show_hide_client(c);
 		c->is_scratchpad_show = 0;
 		c->is_in_scratchpad = 0;
@@ -3088,6 +3096,7 @@ void show_scratchpad(Client *c) {
 		resize(c, c->geom, 0);
 	}
 
+	c->is_pending_unminimize_animation = true;
 	c->oldtags = c->mon->tagset[c->mon->seltags];
 	wl_list_safe_reinsert_next(&clients, &c->link);
 	show_hide_client(c);
@@ -3098,6 +3107,7 @@ bool switch_scratchpad_client_state(Client *c) {
 
 	if (config.scratchpad_cross_monitor && selmon && c->mon != selmon &&
 		c->is_in_scratchpad) {
+
 		// 保存原始monitor用于尺寸计算
 		Monitor *oldmon = c->mon;
 		c->scratchpad_switching_mon = true;
@@ -3118,9 +3128,10 @@ bool switch_scratchpad_client_state(Client *c) {
 		if (c->is_scratchpad_show) {
 			c->tags = get_tags_first_tag(selmon->tagset[selmon->seltags]);
 			resize(c, c->float_geom, 0);
-			arrange(selmon, false, false);
-			focusclient(c, 1);
 			c->scratchpad_switching_mon = false;
+			c->is_pending_unminimize_animation = true;
+			arrange(c->mon, false, false);
+			focusclient(c, 1);
 			return true;
 		} else {
 			resize(c, c->float_geom, 0);
@@ -3130,6 +3141,7 @@ bool switch_scratchpad_client_state(Client *c) {
 
 	if (c->is_in_scratchpad && c->is_scratchpad_show && c->mon &&
 		(c->mon->tagset[c->mon->seltags] & c->tags) == 0) {
+		c->is_pending_unminimize_animation = true;
 		c->tags = c->mon->tagset[c->mon->seltags];
 		arrange(c->mon, false, false);
 		focusclient(c, 1);

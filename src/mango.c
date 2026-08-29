@@ -219,9 +219,22 @@ enum {
 }; /* EWMH atoms */
 #endif
 enum { UP, DOWN, LEFT, RIGHT, UNDIR }; /* smartmovewin */
-enum { NONE, OPEN, MOVE, CLOSE, TAG, FOCUS, OPAFADEIN, OPAFADEOUT, OVERVIEW };
+enum {
+	NONE,
+	OPEN,
+	MOVE,
+	CLOSE,
+	TAG,
+	FOCUS,
+	OPAFADEIN,
+	OPAFADEOUT,
+	OVERVIEW,
+	MINIMIZE,
+	UNMINIMIZE
+};
 enum { UNFOLD, FOLD, INVALIDFOLD };
 enum { PREV, NEXT };
+enum { SW_CURRENT_TAG, SW_ALL_TAG, SW_ALL_MON }; /* switcher 候选范围 */
 enum { STATE_UNSPECIFIED = 0, STATE_ENABLED, STATE_DISABLED };
 enum { FORCE, UNFORCE };
 
@@ -437,6 +450,8 @@ struct Client {
 
 	const char *animation_type_open;
 	const char *animation_type_close;
+	const char *animation_type_unminimize;
+	const char *animation_type_minimize;
 	int32_t is_in_scratchpad;
 	int32_t iscustomsize;
 	int32_t iscustompos;
@@ -454,6 +469,7 @@ struct Client {
 	int32_t isnamedscratchpad;
 	int32_t shield_when_capture;
 	bool is_pending_open_animation;
+	bool is_pending_unminimize_animation;
 	bool is_restoring_from_ov;
 	float scroller_proportion;
 	float stack_proportion;
@@ -616,7 +632,7 @@ struct Monitor {
 	int32_t isoverview;
 	int32_t is_jump_mode;
 	int32_t is_in_hotarea;
-	int32_t ov_normal_mode; /* 热区进入时忽略 ov_tab_mode */
+	int32_t ov_normal_mode; /* 热区进入时使用普通网格布局 */
 	int32_t only_sleep;
 	uint32_t visible_clients;
 	uint32_t visible_tiling_clients;
@@ -1196,6 +1212,8 @@ struct dvec2 *baked_points_close;
 struct dvec2 *baked_points_focus;
 struct dvec2 *baked_points_opafadein;
 struct dvec2 *baked_points_opafadeout;
+struct dvec2 *baked_points_minimize;
+struct dvec2 *baked_points_unminimize;
 
 static struct wl_event_source *hide_cursor_source;
 static struct wl_event_source *keep_idle_inhibit_source;
@@ -1332,6 +1350,7 @@ static void ipc_notify_device_event(struct wlr_input_device *device);
 #include "layout/scroll.h"
 #include "layout/vertical.h"
 #include "overview/overview.h"
+#include "switcher/switcher.h"
 
 #include "manage/client.h"
 #include "input/keyboard.h"

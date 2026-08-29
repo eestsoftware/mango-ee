@@ -724,6 +724,7 @@ void restore_minimized(const Arg *arg) {
 				selmon = c->mon;
 			}
 
+			c->is_pending_unminimize_animation = true;
 			show_hide_client(c);
 			setborder_color(c);
 			warp_cursor(c);
@@ -1922,13 +1923,6 @@ void toggleoverview(const Arg *arg) {
 
 	Client *sel = arg->tc ? arg->tc : selmon->sel;
 
-	if (selmon->isoverview && config.ov_tab_mode && !selmon->is_jump_mode &&
-		!selmon->ov_normal_mode && arg->i != 1 && sel) {
-		focusstack(&(Arg){.i = 1});
-		arrange(selmon, true, false);
-		return;
-	}
-
 	selmon->isoverview ^= 1;
 	uint32_t target;
 	uint32_t visible_client_number = 0;
@@ -1977,9 +1971,8 @@ void toggleoverview(const Arg *arg) {
 				!client_is_x11_popup(c) && !c->isunglobal && !c->isminimized &&
 				client_surface(c)->mapped) {
 				c->animation.overining = true;
-				if (config.ov_tab_mode && !selmon->is_jump_mode &&
-					!selmon->ov_normal_mode)
-					/* ov_tab：先跳过 view 排布，等 focusstack 后再设 */
+				if (!selmon->is_jump_mode && !selmon->ov_normal_mode)
+					/* tab 布局：先跳过 view 排布，进入后统一重排时再设 */
 					c->animation.overview_enter_anim_set = true;
 				else
 					/* 其余模式：view 排布时设置放大 */
@@ -2002,13 +1995,9 @@ void toggleoverview(const Arg *arg) {
 
 	view(&(Arg){.ui = target}, false);
 
-	/* ov_tab：进入后自动切到下一焦点并重排 */
-	if (selmon->isoverview && config.ov_tab_mode && !selmon->is_jump_mode &&
+	/* tab 布局：进入后重排 */
+	if (selmon->isoverview && !selmon->is_jump_mode &&
 		!selmon->ov_normal_mode) {
-
-		if (config.ov_tab_mode_launch_next) {
-			focusstack(&(Arg){.i = 1});
-		}
 
 		Client *cc = NULL;
 		wl_list_for_each(cc, &clients, link) {
